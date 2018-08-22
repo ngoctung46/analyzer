@@ -1,0 +1,46 @@
+﻿<UserControl x:Class="ListAnalyzer.Controls.MainControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:Controls="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+             xmlns:local="clr-namespace:ListAnalyzer.Controls"
+             mc:Ignorable="d" 
+             d:DesignHeight="200" d:DesignWidth="800">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TextBox x:Name="ImportTextBox"
+                 Controls:TextBoxHelper.Watermark="Vui lòng chọn file muốn phân tích"
+                 HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                 Grid.Row="0" Grid.Column="0" IsReadOnly="True"/>
+        <Button x:Name="ImportButton" Style="{StaticResource AccentedSquareButtonStyle}"
+                Content="Tìm..." Grid.Row="0" Grid.Column="1"
+                HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                Margin="5"/>
+        <TextBox x:Name="ReportTextBox"
+                 Controls:TextBoxHelper.Watermark="Vui lòng chọn nơi lưu báo cáo"
+                 HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                 Grid.Row="1" Grid.Column="0" IsReadOnly="True"/>
+        <Button x:Name="ReportButton" Style="{StaticResource AccentedSquareButtonStyle}"
+                Content="Lưu..." Grid.Row="1" Grid.Column="1"
+                HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                Margin="5"/>
+        <Button x:Name="AnalyzeButton" Style="{StaticResource AccentedSquareButtonStyle}"
+                Content="Thực hiện" Grid.Row="2" Grid.ColumnSpan="2"
+                Width="200" VerticalAlignment="Center"
+                Margin="5"/>
+        <TextBlock x:Name="MessageTextBlock" Grid.ColumnSpan="2" HorizontalAlignment="Center"
+                 Width="Auto" VerticalAlignment="Center" Foreground="DarkSeaGreen"
+                 Grid.Row="3" Grid.Column="0"/>
+
+    </Grid>
+</UserControl>
