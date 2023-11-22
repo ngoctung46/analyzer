@@ -4,12 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.OleDb;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Serialization;
 
@@ -228,27 +227,57 @@ namespace ListAnalyzer
             return dataTable.ToList<Report>();
         }
 
-        public static List<Report> CountDuplicate(List<Report> reports)
+        public static List<Report> CountDuplicate(this List<Report> reports)
         {
-            return reports.OrderBy(x => x.DateTime).GroupBy(x => new { x.CID, x.LAC })
+            var test = reports.OrderBy(x => x.Time).GroupBy(x => new { x.CID, x.LAC }).SelectMany(x => x);
+            return reports.OrderBy(x => x.Time).GroupBy(x => new { x.CID, x.LAC })
                                .Where(x => x.Count() > 1)
                                .Select(x => new Report
                                {
                                    CID = x.First().CID,
                                    LAC = x.First().LAC,
                                    Count = x.Count(),
-                                   FirstAppear = x.First().DateTime,
-                                   LastAppear = x.Last().DateTime
+                                   Location = x.First().Location,
+                                   FirstAppear = x.First().Time,
+                                   LastAppear = x.Last().Time
                                }).OrderByDescending(x => x.Count).ToList();
 
         }
 
-        public static List<Report> FindOverlap(List<Report> reports)
+        public static List<Report> FindMostDuration(this List<Report> reports)
+        {
+            return reports.Where(x => x.IsValid()).Where(x =>
+            {
+                int.TryParse(x.Duration, out int duration);
+                return duration >= 30;
+            }).OrderByDescending(x => x.Duration).ToList();
+
+        }
+
+        public static List<Report> FindOverlap(this List<Report> reports)
         {
             return reports
-                .FindAll(
-                    x => x.DateTime >= new DateTime(x.DateTime.Year, x.DateTime.Month, x.DateTime.Day, 19, 20, 0) &&
-                    x.DateTime <= new DateTime(x.DateTime.Year, x.DateTime.Month, x.DateTime.Day, 19, 30, 0));
+               .SelectMany((report1, index1) =>
+                   reports.Skip(index1 + 1).Select(report2 =>
+                   new { Report1 = report1, Report2 = report2 }))
+               .Where(pair =>
+                   Math.Abs((pair.Report1.Time - pair.Report2.Time).TotalSeconds) < 3 &&
+                   (pair.Report1.CID != pair.Report2.CID || pair.Report1.LAC != pair.Report2.LAC))
+               .Where(pair => pair.Report1.IsValid() && pair.Report2.IsValid())
+               .SelectMany(pair => new[] { pair.Report1, pair.Report2 })
+               .Distinct()
+               .ToList();
+        }
+
+        public static List<Report> FindInRange(this List<Report> reports, int startHour = 22, int endHour = 6)
+        {
+            DateTime start = DateTime.Parse($"{startHour}:00:00");
+            DateTime end = DateTime.Parse($"{endHour}:00:00");
+            if (startHour > endHour) { end.AddDays(1); };
+            return reports
+                .Where(report => (report.Time.TimeOfDay >= start.TimeOfDay || report.Time.TimeOfDay < end.TimeOfDay) && report.IsValid())
+                .OrderBy(r => r.Time)
+                .ToList();
         }
 
         public static void ExportReport(string saveFilePath, List<List<Report>> data)
@@ -258,8 +287,8 @@ namespace ListAnalyzer
             List<int> rowNamePos = new List<int>();
             List<string> reportNames = new List<string>();
             #region Duplicate Report
-            List<string> columnNames = new List<string> { "Thời gian bắt đầu", "Thời gian kết thúc", "Cell ID", "LAC", "Vị trí","Số lần xuất hiện"};
-            var reportname = "Phân tích list";
+            List<string> columnNames = new List<string> { "Từ Ngày", "Đến ngày", "Cell ID", "LAC", "Vị trí","Số lần liên lạc"};
+            var reportname = "Liên lạc nhiều";
             reportNames.Add(reportname);
             DataTable table = new DataTable();
             table.TableName = reportname;
@@ -287,7 +316,9 @@ namespace ListAnalyzer
             }
             list.Add(table);
             #endregion
-            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí"};
+
+            #region OverlapReport
+            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí" };
             reportname = "Vùng giao thoa";
             reportNames.Add(reportname);
             table = new DataTable();
@@ -307,15 +338,72 @@ namespace ListAnalyzer
             foreach (Report item in data[1])
             {
                 table.Rows.Add(
-                    item.DateTime.ToString("dd/MM/yy HH:mm:ss"),
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
                     item.CID,
                     item.LAC,
                     item.Location);
             }
             list.Add(table);
-            #region OverlapReport
-
             #endregion OverlapReport
+
+            #region DurationReport
+            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
+            reportname = "Thời lượng gọi";
+            reportNames.Add(reportname);
+            table = new DataTable();
+            table.TableName = reportname;
+
+            foreach (string columnName in columnNames)
+            {
+                table.Columns.Add(columnName);
+            }
+
+            /*
+             * CreateReportHeader has to be called after add columns
+             */
+            rowForColumnName = CreateReportHeader(table, reportname);
+            rowNamePos.Add(rowForColumnName);
+            table.Rows.Add(columnNames.ToArray());
+            foreach (Report item in data[2])
+            {
+                table.Rows.Add(
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.CID,
+                    item.LAC,
+                    item.Location,
+                    item.Duration);
+            }
+            list.Add(table);
+            #endregion
+            #region NightList
+            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
+            reportname = "Từ 22h00 - 06h00";
+            reportNames.Add(reportname);
+            table = new DataTable();
+            table.TableName = reportname;
+
+            foreach (string columnName in columnNames)
+            {
+                table.Columns.Add(columnName);
+            }
+
+            /*
+             * CreateReportHeader has to be called after add columns
+             */
+            rowForColumnName = CreateReportHeader(table, reportname);
+            rowNamePos.Add(rowForColumnName);
+            table.Rows.Add(columnNames.ToArray());
+            foreach (Report item in data[3])
+            {
+                table.Rows.Add(
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.CID,
+                    item.LAC,
+                    item.Location,
+                    item.Duration);
+            }
+            list.Add(table);
+            #endregion
             // Export to file
             DatatableToExcel(saveFilePath, reportNames, list, rowNamePos);
         }
@@ -361,6 +449,7 @@ namespace ListAnalyzer
                 ws.Columns().AdjustToContents();
             }
             wb.SaveAs(filePath);
+            Process.Start(filePath);
         }
     }
 }

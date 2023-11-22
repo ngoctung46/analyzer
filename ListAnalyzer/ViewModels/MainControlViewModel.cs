@@ -4,10 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.OleDb;
+using System.IO;
 using System.Linq;
 using System.Reactive;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Forms;
 
 namespace ListAnalyzer.ViewModels
 {
@@ -47,14 +50,25 @@ namespace ListAnalyzer.ViewModels
 
         private void Submit()
         {
-            Console.WriteLine($"Import path: {ImportPath}");
-            Console.WriteLine($"Report path: {ReportPath}");
-            var list = HelperFunctions.ExcelToList(ImportPath);
-            var duplicateList = HelperFunctions.CountDuplicate(list);
-            reports.Add(duplicateList);
-            var overlapList = HelperFunctions.FindOverlap(list);
-            reports.Add(overlapList);
-            HelperFunctions.ExportReport(ReportPath, reports);
+            try
+            {
+                var list = HelperFunctions.ExcelToList(ImportPath);
+                var duplicateList = list.CountDuplicate();
+                reports.Add(duplicateList);
+                var overlapList = list.FindOverlap();
+                reports.Add(overlapList);
+                var mostDurationList = list.FindMostDuration();
+                reports.Add(mostDurationList);
+                var nightList = list.FindInRange();
+                reports.Add(nightList);
+                HelperFunctions.ExportReport(ReportPath, reports);
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox
+                    .Show(ex.Message.ToString(), "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
         }
 
         private void Report()

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ListAnalyzer.Models;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -123,6 +124,11 @@ namespace ListAnalyzer
         private static DateTime convertToDateTime(object date)
         {
             return Convert.ToDateTime(HelperFunctions.ReturnDateTimeMinIfNull(date));
+        }
+
+        public static bool IsValid(this Report report)
+        {
+            return !string.IsNullOrWhiteSpace(report.CID) && !string.IsNullOrWhiteSpace(report.LAC);
         }
     }
 }
