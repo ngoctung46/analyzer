@@ -1,4 +1,6 @@
-﻿using ClosedXML.Excel;
+﻿ using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Bibliography;
+using ExcelDataReader;
 using ListAnalyzer.Models;
 using System;
 using System.Collections.Generic;
@@ -202,31 +204,6 @@ namespace ListAnalyzer
             return hoursStr + ':' + minsStr + ':' + secsStr;
         }
 
-        public static List<Report> ExcelToList(string importPath)
-        {
-            string connectionStr = @"Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + importPath + ";Extended Properties='Excel 12.0;HDR=Yes;IMEX=1';";
-            connectionStr = @"provider=Microsoft.Jet.OLEDB.4.0;Data Source=" + importPath + ";Extended Properties='Excel 8.0;HRD=Yes;IMEX=1';";//for below excel 2007
-
-            DataTable dataTable = new DataTable();
-            using (OleDbConnection connection = new OleDbConnection(connectionStr))
-            {
-                try
-                {
-                    connection.Open();
-                    DataTable dt = connection.GetSchema("Tables");
-                    if (dt == null || dt.Rows.Count <= 0) return null;
-                    string firstSheetName = dt.Rows[0]["TABLE_NAME"].ToString();
-                    OleDbDataAdapter oleAdpt = new OleDbDataAdapter("select * from [" + firstSheetName + "]", connection);//here we read data from sheet1
-                    oleAdpt.Fill(dataTable);//fill excel data into dataTable
-                }
-                catch (Exception ex)
-                {
-                    System.Windows.MessageBox.Show(ex.Message.ToString());
-                }
-            }
-            return dataTable.ToList<Report>();
-        }
-
         public static List<Report> CountDuplicate(this List<Report> reports)
         {
             var test = reports.OrderBy(x => x.Time).GroupBy(x => new { x.CID, x.LAC }).SelectMany(x => x);
@@ -236,6 +213,8 @@ namespace ListAnalyzer
                                {
                                    CID = x.First().CID,
                                    LAC = x.First().LAC,
+                                   From = x.First().From,
+                                   To = x.First().To,
                                    Count = x.Count(),
                                    Location = x.First().Location,
                                    FirstAppear = x.First().Time,
@@ -244,15 +223,29 @@ namespace ListAnalyzer
 
         }
 
+        public static List<Report> CountContact(this List<Report> reports)
+        {
+            return reports.GroupBy(x => new { x.From, x.To })
+                    .Select(x => new Report
+                    {
+                        TimeStr = x.First().TimeStr,
+                        From = x.First().From,
+                        To = x.First().To,
+                        Count = x.Count()
+                    }).OrderByDescending(x => x.Count).ToList();
+        }
+
+
         public static List<Report> FindMostDuration(this List<Report> reports)
         {
-            return reports.Where(x => x.IsValid()).Where(x =>
+            var filteredList = reports.Where(x => x.IsValid()).OrderByDescending(x =>
             {
                 int.TryParse(x.Duration, out int duration);
-                return duration >= 30;
-            }).OrderByDescending(x => x.Duration).ToList();
+                return duration;
+            }).ToList();
+            return filteredList;
 
-        }
+         }
 
         public static List<Report> FindOverlap(this List<Report> reports)
         {
@@ -269,7 +262,7 @@ namespace ListAnalyzer
                .ToList();
         }
 
-        public static List<Report> FindInRange(this List<Report> reports, int startHour = 22, int endHour = 6)
+        public static List<Report> FindInRange(this List<Report> reports, int startHour = 22, int endHour = 7)
         {
             DateTime start = DateTime.Parse($"{startHour}:00:00");
             DateTime end = DateTime.Parse($"{endHour}:00:00");
@@ -287,8 +280,9 @@ namespace ListAnalyzer
             List<int> rowNamePos = new List<int>();
             List<string> reportNames = new List<string>();
             #region Duplicate Report
-            List<string> columnNames = new List<string> { "Từ Ngày", "Đến ngày", "Cell ID", "LAC", "Vị trí","Số lần liên lạc"};
-            var reportname = "Liên lạc nhiều";
+            List<string> columnNames = new List<string> { "Từ Ngày", "Đến ngày", "Số gọi", "Số nhận", "Cell"
+                , "LAC", "Vị trí","Số lần"};
+            var reportname = "Xuất hiện nhiều";
             reportNames.Add(reportname);
             DataTable table = new DataTable();
             table.TableName = reportname;
@@ -309,6 +303,8 @@ namespace ListAnalyzer
                 table.Rows.Add(
                     item.FirstAppear.ToString("dd/MM/yy HH:mm:ss"),
                     item.LastAppear.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From,
+                    item.To,
                     item.CID,
                     item.LAC,
                     item.Location,
@@ -318,7 +314,7 @@ namespace ListAnalyzer
             #endregion
 
             #region OverlapReport
-            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí" };
+            columnNames = new List<string> { "Thời gian", "Số gọi", "Số nhận", "Cell", "LAC", "Vị trí" };
             reportname = "Vùng giao thoa";
             reportNames.Add(reportname);
             table = new DataTable();
@@ -339,6 +335,8 @@ namespace ListAnalyzer
             {
                 table.Rows.Add(
                     item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From,
+                    item.To,
                     item.CID,
                     item.LAC,
                     item.Location);
@@ -347,7 +345,7 @@ namespace ListAnalyzer
             #endregion OverlapReport
 
             #region DurationReport
-            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
+            columnNames = new List<string> { "Thời gian", "Số gọi", "Số nhận", "Cell", "LAC", "Vị trí", "Thời lượng" };
             reportname = "Thời lượng gọi";
             reportNames.Add(reportname);
             table = new DataTable();
@@ -368,6 +366,8 @@ namespace ListAnalyzer
             {
                 table.Rows.Add(
                     item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From,
+                    item.To,
                     item.CID,
                     item.LAC,
                     item.Location,
@@ -376,8 +376,39 @@ namespace ListAnalyzer
             list.Add(table);
             #endregion
             #region NightList
-            columnNames = new List<string> { "Thời gian", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
-            reportname = "Từ 22h00 - 06h00";
+            columnNames = new List<string> { "Thời gian", "Số gọi", "Số nhận", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
+            reportname = "Từ 22h00 - 07h00";
+            reportNames.Add(reportname);
+            table = new DataTable();
+            table.TableName = reportname;
+
+            foreach (string columnName in columnNames)
+            {
+                table.Columns.Add(columnName);
+            }
+
+            /*
+             * CreateReportHeader has to be called after add columns
+             */
+            rowForColumnName = CreateReportHeader(table, reportname);
+            rowNamePos.Add(rowForColumnName);
+            table.Rows.Add(columnNames.ToArray());
+            foreach (Report item in data[5])
+            {
+                table.Rows.Add(
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From,
+                    item.To,
+                    item.CID,
+                    item.LAC,
+                    item.Location,
+                    item.Duration);
+            }
+            list.Add(table);
+            #endregion
+            #region DayList
+            columnNames = new List<string> { "Thời gian", "Số gọi", "Số nhận", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
+            reportname = "Từ 07h00 - 17h00";
             reportNames.Add(reportname);
             table = new DataTable();
             table.TableName = reportname;
@@ -397,6 +428,8 @@ namespace ListAnalyzer
             {
                 table.Rows.Add(
                     item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From,
+                    item.To,
                     item.CID,
                     item.LAC,
                     item.Location,
@@ -404,6 +437,90 @@ namespace ListAnalyzer
             }
             list.Add(table);
             #endregion
+            #region EveningList
+            columnNames = new List<string> { "Thời gian", "Số gọi", "Số nhận", "Cell ID", "LAC", "Vị trí", "Thời lượng" };
+            reportname = "Từ 17h00 - 22h00";
+            reportNames.Add(reportname);
+            table = new DataTable();
+            table.TableName = reportname;
+
+            foreach (string columnName in columnNames)
+            {
+                table.Columns.Add(columnName);
+            }
+
+            /*
+             * CreateReportHeader has to be called after add columns
+             */
+            rowForColumnName = CreateReportHeader(table, reportname);
+            rowNamePos.Add(rowForColumnName);
+            table.Rows.Add(columnNames.ToArray());
+            foreach (Report item in data[4])
+            {
+                table.Rows.Add(
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From,
+                    item.To,
+                    item.CID,
+                    item.LAC,
+                    item.Location,
+                    item.Duration);
+            }
+            list.Add(table);
+            #endregion
+            #region FindIMEI
+            columnNames = new List<string> { "Thời gian", "IMEI", "IMSI" };
+            reportname = "IMEI-IMSI đã sử dụng";
+            reportNames.Add(reportname);
+            table = new DataTable();
+            table.TableName = reportname;
+
+            foreach (string columnName in columnNames)
+            {
+                table.Columns.Add(columnName);
+            }
+
+            /*
+             * CreateReportHeader has to be called after add columns
+             */
+            rowForColumnName = CreateReportHeader(table, reportname);
+            rowNamePos.Add(rowForColumnName);
+            table.Rows.Add(columnNames.ToArray());
+            foreach (Report item in data[6])
+            {
+                table.Rows.Add(
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.IMEI, item.IMSI);
+            }
+            list.Add(table);
+            #endregion
+            #region contactList
+            columnNames = new List<string> { "Thời gian", "Số gọi", "Số nhận", "Số lần liên lạc" };
+            reportname = "Liên lạc nhiều";
+            reportNames.Add(reportname);
+            table = new DataTable();
+            table.TableName = reportname;
+
+            foreach (string columnName in columnNames)
+            {
+                table.Columns.Add(columnName);
+            }
+
+            /*
+             * CreateReportHeader has to be called after add columns
+             */
+            rowForColumnName = CreateReportHeader(table, reportname);
+            rowNamePos.Add(rowForColumnName);
+            table.Rows.Add(columnNames.ToArray());
+            foreach (Report item in data[7])
+            {
+                table.Rows.Add(
+                    item.Time.ToString("dd/MM/yy HH:mm:ss"),
+                    item.From, item.To, item.Count);
+            }
+            list.Add(table);
+            #endregion
+
             // Export to file
             DatatableToExcel(saveFilePath, reportNames, list, rowNamePos);
         }
@@ -450,6 +567,99 @@ namespace ListAnalyzer
             }
             wb.SaveAs(filePath);
             Process.Start(filePath);
+        }
+        public static List<Report> ReadExcel(string filePath, List<string> columns)
+        {
+            //read the Excel file using ExcelDataReader
+            using (var stream = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            {
+                var reports = new List<Report>();
+                using (var reader = ExcelReaderFactory.CreateReader(stream))
+                {
+                    //create a data set configuration with header row
+                    var config = new ExcelDataSetConfiguration()
+                    {
+                        ConfigureDataTable = _ => new ExcelDataTableConfiguration()
+                        {
+                            UseHeaderRow = true
+                        }
+                    };
+
+                    //get the data set from the reader
+                    var dataSet = reader.AsDataSet(config);
+
+                    //get the first table from the data set
+                    var dataTable = dataSet.Tables[0];
+
+                    //loop through the rows
+                    foreach (DataRow row in dataTable.Rows)
+                    {
+                        //create a new report object
+                        Report report = new Report();
+                        int networkCode = int.Parse(columns.Last());
+                        //get the values from the specific columns by name
+                        report.TimeStr = networkCode == 2 ? row[columns[0]].ToString() + "-" + row[columns[9]].ToString()
+                            : row[columns[0]].ToString();
+                        report.From = row[columns[1]].ToString();
+                        report.To = row[columns[2]].ToString();
+                        report.Duration = row[columns[3]].ToString();
+                        if(networkCode == 1)
+                        {
+                            var ids = row[columns[5]].ToString().Split('-');
+                            if (ids.Count() == 2)
+                            {
+                                report.LAC = ids[0];
+                                report.CID = ids[1] ;
+                            }
+                            else if (ids.Count() == 3)
+                            {
+                                report.LAC = ids[0];
+                                report.CID = ids[1] + "." + ids[2];
+                            }
+                            else
+                            {
+                                report.LAC = string.Empty;
+                                report.CID = string.Empty;
+                            }
+                        }
+
+                        else 
+                        {
+                            report.LAC = row[columns[4]].ToString();
+                            report.CID = row[columns[5]].ToString();
+                        }
+                        if (columns[6] != string.Empty)
+                        {
+                            report.Location = row[columns[6]].ToString();
+                        }
+                        report.IMEI = row[columns[7]].ToString();
+                        if (columns[8] != string.Empty)
+                        {
+                            report.IMSI = row[columns[8]].ToString();
+                        }
+                        report.NetworkCode = networkCode;
+                        //add the report to the list
+                        reports.Add(report);
+                    }
+                }
+                return reports;
+            }
+        }
+
+        public static List<string> GetColumnsByNetwork(int network)
+        {
+            switch(network)
+            {
+                case 1: return new List<string>() { "Thời gian", "Số chủ", "Số liên hệ", "Thời lượng",string.Empty, "Mã địa danh", "Tên địa danh", "IMEI", string.Empty, "1" };
+                case 2: return new List<string>() { "date", "a_subs", "b_subs", "duration", "lac", "cellid",string.Empty, "imei", "imsi", "time", "2" };
+                case 4: return new List<string>() { "Thời gian","Số đi", "Số đến", "Giây", "LAC", "Số Cell","Địa chỉ trạm BTS", "IMEI", "IMSI", "4" };
+                default: return new List<string>();
+            }
+        }
+
+        private static bool CheckIfHomePhone(string phone)
+        {
+            return phone.StartsWith("0") || phone.StartsWith("02");
         }
     }
 }

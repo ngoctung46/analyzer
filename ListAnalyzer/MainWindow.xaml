@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        Title="Phân tích List" Height="200" Width="800">
+        Title="Phân tích List" Height="250" Width="800">
     <Grid>
         <localControls:MainControl/>
     </Grid>

@@ -2,6 +2,7 @@
 using ReactiveUI;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.OleDb;
 using System.IO;
@@ -22,6 +23,21 @@ namespace ListAnalyzer.ViewModels
             get => filePath;
             set => this.RaiseAndSetIfChanged(ref filePath, value);
         }
+
+        private Network selectedNetwork = null;
+        public Network SelectedNetwork
+        {
+            get => selectedNetwork;
+            set => this.RaiseAndSetIfChanged(ref selectedNetwork, value);
+        }
+
+        public ObservableCollection<Network> Networks = new ObservableCollection<Network>()
+        {
+            new Network() { NetworkCode = 1, NetworkName = "Mobifone"},
+            new Network() { NetworkCode = 2, NetworkName = "Vinaphone"},
+            new Network(){ NetworkCode = 4, NetworkName = "Viettel"},
+            new Network() { NetworkCode = 5, NetworkName = "Vienamobile"}
+        };
 
         private List<List<Report>> reports = new List<List<Report>>();
         private readonly ObservableAsPropertyHelper<string> importPath;
@@ -45,6 +61,7 @@ namespace ListAnalyzer.ViewModels
             var canSubmit = FilePath
                 .WhenAnyValue(x => x.ImportPath, y => y.ReportPath, (x, y)
                     => !string.IsNullOrWhiteSpace(x) && !string.IsNullOrWhiteSpace(y));
+            canSubmit = this.WhenAny(x => x.SelectedNetwork, x => x != null);
             SubmitCommand = ReactiveCommand.Create(Submit, canSubmit);
         }
 
@@ -52,15 +69,27 @@ namespace ListAnalyzer.ViewModels
         {
             try
             {
-                var list = HelperFunctions.ExcelToList(ImportPath);
+                var columns = HelperFunctions.GetColumnsByNetwork(SelectedNetwork.NetworkCode);
+                var list = HelperFunctions.ReadExcel(ImportPath, columns);
+                if(list.Count <= 0) { throw new Exception("File excel không có dữ liệu hoặc không đúng định dạng cột"); }
                 var duplicateList = list.CountDuplicate();
                 reports.Add(duplicateList);
                 var overlapList = list.FindOverlap();
                 reports.Add(overlapList);
                 var mostDurationList = list.FindMostDuration();
                 reports.Add(mostDurationList);
+                var dayList = list.FindInRange(startHour: 7, endHour: 17);
+                reports.Add(dayList);
+                var eveningList = list.FindInRange(startHour: 17, endHour: 22);
+                reports.Add(eveningList);
                 var nightList = list.FindInRange();
                 reports.Add(nightList);
+                var imeiList = list.GroupBy(x => x.IMEI).Select(x => x.First()).ToList();
+                var imsiList = list.GroupBy(x => x.IMSI).Select(x => x.First()).ToList();
+                reports.Add(imeiList.Union(imsiList).ToList());
+                var contactList = list.CountContact();
+                reports.Add(contactList);
+
                 HelperFunctions.ExportReport(ReportPath, reports);
             }
             catch (Exception ex)

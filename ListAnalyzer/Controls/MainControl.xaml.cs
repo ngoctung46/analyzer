@@ -33,6 +33,7 @@ namespace ListAnalyzer.Controls
             InitializeComponent();
             ViewModel = new MainControlViewModel();
             this.WhenActivated(Bind);
+            Init();
         }
 
         private void Bind(Action<IDisposable> d)
@@ -40,6 +41,8 @@ namespace ListAnalyzer.Controls
 
             d(this.OneWayBind(ViewModel, vm => vm.ImportPath, v => v.ImportTextBox.Text));
             d(this.OneWayBind(ViewModel, vm => vm.ReportPath, v => v.ReportTextBox.Text));
+            d(this.OneWayBind(ViewModel, vm => vm.Networks, v => v.NetworkComboBox.ItemsSource));
+            d(this.Bind(ViewModel, vm => vm.SelectedNetwork, v => v.NetworkComboBox.SelectedItem));
             d(this.BindCommand(ViewModel, vm => vm.ImportCommand, v => v.ImportButton));
             d(this.BindCommand(ViewModel, vm => vm.ReportCommand, v => v.ReportButton));
             d(this.BindCommand(ViewModel, vm => vm.SubmitCommand, v => v.AnalyzeButton));
@@ -49,6 +52,11 @@ namespace ListAnalyzer.Controls
             {
                 MessageTextBlock.Text = $"File báo cáo đã được tạo thành công tại: {ViewModel.ReportPath}";
             }));
+        }
+
+        private void Init()
+        {
+            NetworkComboBox.SelectedIndex = 0;
         }
 
         internal string GetImportPath()
